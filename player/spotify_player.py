@@ -21,6 +21,7 @@ from views.player_view import PlayerView
 from player.playback_controller import PlaybackController
 
 W, H = 64, 64
+CRT_DURATION_SEC = 0.6
 
 class SpotifyPlayer:
     """
@@ -32,6 +33,7 @@ class SpotifyPlayer:
         self.config = config
         
         self.fetch_interval = config.getint('Spotify', 'fetch_interval', fallback=1)
+        self.idle_fetch_interval = config.getfloat('Spotify', 'idle_fetch_interval', fallback=5.0)
         self.fullscreen_delay = config.getfloat('Player', 'fullscreen_delay', fallback=10.0)
         self.shutdown_delay = config.getfloat('Player', 'shutdown_delay', fallback=30.0)
 
@@ -71,19 +73,22 @@ class SpotifyPlayer:
         self.current_view_name = None
         self.current_power_state = None
 
-        self.spotify_module.start_polling(self.playback.set_current_playback, self.fetch_interval)
+        self.spotify_module.start_polling(self.playback.set_current_playback, self.fetch_interval, self.idle_fetch_interval)
 
     def _handle_track_change(self, current_track_id: str, now: float):
         """Detects if the track has changed and triggers transition animations."""
         if current_track_id and current_track_id != self.last_track_id:
             always_fullscreen = self.config.getboolean('Player', 'always_fullscreen', fallback=False)
+            # Draw on a copy, since the last frame may be a shared image (black screen or cached art)
+            snapshot = self.last_generated_frame
             if self.last_response and self.last_track_id:
-                draw = ImageDraw.Draw(self.last_generated_frame)
+                snapshot = snapshot.copy()
+                draw = ImageDraw.Draw(snapshot)
                 color = self.art_cache.get_color(self.last_response.art_url) if getattr(self.last_response, 'art_url', None) else SPOTIFY_BRAND_GREEN
                 if self.lyrics_t < 0.5 and not always_fullscreen:
                     self.view.play_indicator.draw(draw, "Paused", color=color)
-            
-            self.player_transition.start(current_track_id, self.last_track_id, self.last_generated_frame, slide_progress_bar=always_fullscreen)
+
+            self.player_transition.start(current_track_id, self.last_track_id, snapshot, slide_progress_bar=always_fullscreen)
             self.player_transition.update_history(current_track_id)
             self.view.title.end_scroll(now)
             self.view.artist.end_scroll(now)
@@ -109,6 +114,10 @@ class SpotifyPlayer:
 
     def _render_active_view(self, response, progress_ms: int, duration_ms: int, time_paused: float, time_playing: float, time_since_lyrics_fetched: float, now: float, dt: float):
         """Determines and renders the appropriate view based on playback state and timeouts."""
+        if self.is_crt and now - self.crt_start_time >= CRT_DURATION_SEC:
+            # The display is off and stays black until playback resumes
+            return self.black_screen
+
         dedicated_lyrics = self.config.getboolean('Player', 'dedicated_lyrics', fallback=False)
         always_fullscreen = self.config.getboolean('Player', 'always_fullscreen', fallback=False)
         show_lyrics = not dedicated_lyrics
@@ -122,9 +131,14 @@ class SpotifyPlayer:
                 t = 1.0
             else:
                 t = min(1.0, (now - self.fullscreen_start_time) / 0.5)
-                
-            std = generate_standard_view(response, progress_ms, duration_ms, True, self.view, show_lyrics, time_paused, time_playing, time_since_lyrics_fetched)
-            frame = generate_fullscreen_view(response, self.view, t, std)
+
+            art = self.art_cache.get(response.art_url, W) if response.art_url else None
+            if t >= 1.0 and art is not None and art.size == (W, H):
+                # Fully zoomed artwork covers the whole frame, so skip rendering the view underneath
+                frame = art
+            else:
+                std = generate_standard_view(response, progress_ms, duration_ms, True, self.view, show_lyrics, time_paused, time_playing, time_since_lyrics_fetched)
+                frame = generate_fullscreen_view(response, self.view, t, std)
         else:
             self.fullscreen_start_time = 0
             is_dedicated_lyrics = self._update_lyric_state(response, progress_ms, dt, dedicated_lyrics, now, time_playing)
@@ -169,7 +183,7 @@ class SpotifyPlayer:
                 self.crt_start_time = now
                 self.is_crt = True
                 self.pre_crt_frame = frame.copy()
-            t = min(1.0, (now - self.crt_start_time) / 0.6)
+            t = min(1.0, (now - self.crt_start_time) / CRT_DURATION_SEC)
             frame = generate_crt_view(self.pre_crt_frame, t)
             
         return frame

@@ -107,18 +107,28 @@ def main():
         
         next_frame_time = time.perf_counter()
         last_time = next_frame_time
-        
+        last_frame = None
+        last_frame_bytes = None
+
         while True:
             now = time.perf_counter()
             delta_time = now - last_time
             last_time = now
-            
+
             frame = spotify_player.generate(delta_time)
-            
+
             if frame:
-                matrix.SetImage(frame)
+                # Only push frames that changed. The emulator handles its window events
+                # while drawing, so it keeps receiving every frame.
+                if frame is not last_frame or args.emulate:
+                    frame_bytes = frame.tobytes()
+                    if frame_bytes != last_frame_bytes or args.emulate:
+                        matrix.SetImage(frame)
+                        last_frame_bytes = frame_bytes
+                    last_frame = frame
             else:
                 matrix.Clear()
+                last_frame = last_frame_bytes = None
             
             now = time.perf_counter()
             sleep_time = next_frame_time - now
