@@ -88,7 +88,7 @@ Don't have a Raspberry Pi or LED matrix yet? No worries! Play around with the em
 
 - [Adafruit 64x64 RGB LED Matrix - 2.5mm Pitch - 1/32 Scan](https://www.adafruit.com/product/3649)
 - [Adafruit RGB Matrix Bonnet for Raspberry Pi](https://www.adafruit.com/product/3211)
-- [Raspberry Pi 3B+](https://www.raspberrypi.com/products/raspberry-pi-3-model-b-plus/) (or newer)
+- [Raspberry Pi 3B+](https://www.raspberrypi.com/products/raspberry-pi-3-model-b-plus/) (or newer; a Pi Zero also works using 32-bit Raspberry Pi OS Lite, Python 3.9+. Lyrics require Python 3.10+)
 - Any microSD card
 - [5V 10A Power Supply Adapter](https://www.amazon.com/gp/product/B08HCS1X66)
 

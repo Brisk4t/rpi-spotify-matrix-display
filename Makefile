@@ -1,59 +1,33 @@
-PYTHON_CMD ?= $(shell if command -v /opt/homebrew/bin/python3 >/dev/null 2>&1 && /opt/homebrew/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then echo "/opt/homebrew/bin/python3"; else for cmd in python3 python3.13 python3.12 python3.11 python3.10; do if command -v $$cmd >/dev/null 2>&1 && $$cmd -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then echo $$cmd; exit 0; fi; done; echo "python3"; fi)
+PYTHON_CMD ?= python3
+IS_RPI := $(shell grep -qi "Raspberry Pi" /proc/device-tree/model 2>/dev/null && echo 1)
+BOOT_DIR := $(shell [ -d /boot/firmware ] && echo /boot/firmware || echo /boot)
+
+# Pinned to the last commit with the classic setup.py Python binding. Newer commits
+# require Python 3.11+ and Pillow 12, which do not run on older Pis (e.g. Pi Zero / Bullseye).
+RGBMATRIX_REPO := https://github.com/hzeller/rpi-rgb-led-matrix.git
+RGBMATRIX_COMMIT := d8778b5f044b216acef2dec723bc9bdcd227cd8d
 
 install: ## Install dependencies and request Spotify credentials
-	@if ! command -v $(PYTHON_CMD) >/dev/null 2>&1 || ! $(PYTHON_CMD) -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then \
-		echo "⚠️  Python 3.10 or newer is required to install dependencies."; \
-		if command -v $(PYTHON_CMD) >/dev/null 2>&1; then echo "Current version: $$($(PYTHON_CMD) --version)"; fi; \
-		read -p "Would you like to attempt to install the latest Python now? [Y/n]: " install_python; \
-		if [ "$$install_python" = "y" ] || [ "$$install_python" = "Y" ]; then \
-			if command -v brew >/dev/null 2>&1; then \
-				echo "📦 Installing Python via Homebrew..."; \
-				brew install python3; \
-			elif command -v apt-get >/dev/null 2>&1; then \
-				echo "📦 Installing Python via apt..."; \
-				sudo apt-get update || true; sudo apt-get install -y python3 python3-venv python-dev-is-python3 python3-pil cython3; \
-				if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then \
-					echo "⚠️  Your package manager only provided Python $$(python3 --version 2>/dev/null | cut -d' ' -f2 || echo 'unknown')."; \
-					read -p "Would you like to compile Python 3.11 from source? (This will take a few minutes) [Y/n]: " compile_python; \
-					if [ "$$compile_python" = "y" ] || [ "$$compile_python" = "Y" ]; then \
-						echo "📦 Installing build dependencies..."; \
-						sudo apt-get update >/dev/null 2>&1 || true; \
-						sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git >/dev/null 2>&1; \
-						echo "📦 Downloading and compiling Python 3.11 (this may take a few minutes)..."; \
-						wget -q https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz && \
-						tar -xf Python-3.11.9.tgz && \
-						cd Python-3.11.9 && ./configure --enable-optimizations --quiet >/dev/null && make -s -j 4 >/dev/null && sudo make -s altinstall >/dev/null && \
-						cd .. && rm -rf Python-3.11.9 Python-3.11.9.tgz; \
-						echo "✅ Python 3.11 compiled successfully."; \
-					else \
-						echo "❌ Installation aborted. Python 3.10+ is required."; \
-						exit 1; \
-					fi; \
-				fi; \
-			else \
-				echo "❌ Could not determine package manager. Please install Python 3.10+ manually."; \
-				exit 1; \
-			fi; \
-			echo "🔄 Please run \\033[1;36mmake\033[0m again."; \
-			exit 1; \
-		else \
-			echo "❌ Installation aborted. Python 3.10+ is required."; \
-			exit 1; \
-		fi \
+	@if ! command -v $(PYTHON_CMD) >/dev/null 2>&1 || ! $(PYTHON_CMD) -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' >/dev/null 2>&1; then \
+		echo "❌ Python 3.9 or newer is required. Use \033[1;36mmake PYTHON_CMD=/path/to/python3\033[0m to select an interpreter."; \
+		exit 1; \
+	fi
+	@if command -v apt-get >/dev/null 2>&1; then \
+		PYTHON_VER=$$($(PYTHON_CMD) -c 'import sys; print("%d.%d" % sys.version_info[:2])'); \
+		PKGS="python$$PYTHON_VER-venv python$$PYTHON_VER-dev"; \
+		if [ -n "$(IS_RPI)" ]; then PKGS="$$PKGS git build-essential liblcms2-2 libopenjp2-7 libwebpdemux2 libwebpmux3"; fi; \
+		echo "📦 Ensuring $$PKGS are installed..."; \
+		sudo apt-get update >/dev/null 2>&1 || true; \
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y $$PKGS >/dev/null 2>&1 || echo "⚠️  Could not install some of: $$PKGS"; \
 	fi
 	$(PYTHON_CMD) -m venv .venv
-	@if command -v apt-get >/dev/null 2>&1; then \
-		PYTHON_VER=$$($(PYTHON_CMD) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'); \
-		echo "📦 Ensuring python$$PYTHON_VER-dev is installed..."; \
-		sudo apt-get update >/dev/null 2>&1 || true; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python$$PYTHON_VER-dev >/dev/null 2>&1 || true; \
+	.venv/bin/pip install --upgrade pip setuptools wheel
+	@# --prefer-binary avoids compiling packages from source when an older prebuilt wheel exists (e.g. piwheels)
+	@if [ -n "$(IS_RPI)" ]; then \
+		.venv/bin/pip install --prefer-binary -e . "Pillow<12" && $(MAKE) --no-print-directory rpi-rgbmatrix; \
+	else \
+		.venv/bin/pip install --prefer-binary -e ".[emulator]"; \
 	fi
-	@echo "📦 Downloading Pillow C-headers for cross-version compatibility..."
-	@mkdir -p .venv/include/Pillow
-	@curl -sL https://github.com/python-pillow/Pillow/archive/refs/tags/10.3.0.tar.gz -o pillow.tar.gz
-	@tar -xzf pillow.tar.gz
-	@cp -r Pillow-10.3.0/src/libImaging/*.h .venv/include/Pillow/
-	@rm -rf Pillow-10.3.0 pillow.tar.gz
-	CFLAGS="-I$(CURDIR)/.venv/include/Pillow" .venv/bin/pip install -e .
 	@rm -rf *.egg-info/
 	@if [ ! -f config.ini ]; then cp config.ini.example config.ini; fi
 	@if grep -q "client_id = <YOUR_CLIENT_ID_HERE>" config.ini; then \
@@ -86,7 +60,7 @@ help: ## Show this help message
 
 clean: ## Reset repo to a clean state
 	@echo "🧹 Resetting repo to a clean state...";
-	rm -rf build/ dist/ *.egg-info/ .venv/
+	rm -rf build/ dist/ *.egg-info/ .venv/ rpi-rgb-led-matrix/
 	rm -f .cache config.ini matrix.log
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || sudo rm -rf {} +
 	find . -type f -name "*.pyc" -exec rm -f {} + 2>/dev/null || sudo rm -f {} +
@@ -114,7 +88,7 @@ emulate: check-venv ## Run the display within an emulator window
 
 ## RASPBERRY PI SPECIFIC TARGETS ##
 
-run: check-venv rpi-optimize rpi-service ## Run the display on a raspberry pi connected matrix
+run: check-venv rpi-rgbmatrix rpi-optimize rpi-service ## Run the display on a raspberry pi connected matrix
 	@echo "▶️ Starting Spotify Matrix Display..."
 	sudo .venv/bin/python main.py
 
@@ -124,18 +98,36 @@ check-rpi:
 		exit 1; \
 	fi
 
+rpi-rgbmatrix: check-venv check-rpi ## Raspberry Pi ONLY - Build and install the rgbmatrix library
+	@if .venv/bin/python -c 'import rgbmatrix' >/dev/null 2>&1; then \
+		echo "✅ rgbmatrix is already installed."; \
+	else \
+		echo "📦 Building rgbmatrix (this can take a while on older Pis)..."; \
+		rm -rf rpi-rgb-led-matrix && mkdir rpi-rgb-led-matrix && \
+		git -C rpi-rgb-led-matrix init -q && \
+		git -C rpi-rgb-led-matrix fetch -q --depth 1 $(RGBMATRIX_REPO) $(RGBMATRIX_COMMIT) && \
+		git -C rpi-rgb-led-matrix checkout -q FETCH_HEAD && \
+		.venv/bin/pip install --prefer-binary "cython>=3" && \
+		$(MAKE) -C rpi-rgb-led-matrix/lib && \
+		$(MAKE) -C rpi-rgb-led-matrix/bindings/python/rgbmatrix CYTHON=$(CURDIR)/.venv/bin/cython && \
+		.venv/bin/pip install --no-build-isolation ./rpi-rgb-led-matrix/bindings/python && \
+		rm -rf rpi-rgb-led-matrix && \
+		echo "✅ rgbmatrix installed."; \
+	fi
+
 rpi-optimize: check-rpi ## Raspberry Pi ONLY - Optimize matrix performance
 	@if [ ! -f /etc/systemd/system/matrix.service ] || [ "$(filter rpi-optimize,$(MAKECMDGOALS))" != "" ]; then \
-		read -p "⚠️ Would you like to reserve a CPU core for the display and disable onboard audio to optimize performance? [Y/n]: " proceed; \
+		if [ $$(grep -c ^processor /proc/cpuinfo) -ge 4 ]; then multicore=1; msg="reserve a CPU core for the display and disable onboard audio"; else multicore=0; msg="disable onboard audio"; fi; \
+		read -p "⚠️ Would you like to $$msg to optimize performance? [Y/n]: " proceed; \
 		if [ "$$proceed" != "y" ] && [ "$$proceed" != "Y" ]; then \
 			echo "Optimization aborted. Feel free to use \\033[1;36mmake rpi-optimize\\033[0m to run this later."; \
 		else \
 			changed=0; \
-			if ! grep -q "isolcpus=3" /boot/firmware/cmdline.txt; then \
-				echo "⚙️  Adding isolcpus=3 to /boot/firmware/cmdline.txt..."; \
-				sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.tmp; \
-				sudo sed -i 's/$$/ isolcpus=3/' /boot/firmware/cmdline.txt.tmp; \
-				sudo mv /boot/firmware/cmdline.txt.tmp /boot/firmware/cmdline.txt; \
+			if [ $$multicore -eq 1 ] && ! grep -q "isolcpus=3" $(BOOT_DIR)/cmdline.txt; then \
+				echo "⚙️  Adding isolcpus=3 to $(BOOT_DIR)/cmdline.txt..."; \
+				sudo cp $(BOOT_DIR)/cmdline.txt $(BOOT_DIR)/cmdline.txt.tmp; \
+				sudo sed -i 's/$$/ isolcpus=3/' $(BOOT_DIR)/cmdline.txt.tmp; \
+				sudo mv $(BOOT_DIR)/cmdline.txt.tmp $(BOOT_DIR)/cmdline.txt; \
 				echo "✅ isolcpus=3 added."; \
 				changed=1; \
 			fi; \
@@ -145,11 +137,11 @@ rpi-optimize: check-rpi ## Raspberry Pi ONLY - Optimize matrix performance
 				echo "✅ snd_bcm2835 blacklisted."; \
 				changed=1; \
 			fi; \
-			if ! grep -q "^dtparam=audio=off" /boot/firmware/config.txt; then \
+			if ! grep -q "^dtparam=audio=off" $(BOOT_DIR)/config.txt; then \
 				echo "⚙️  Disabling onboard audio in config.txt..."; \
-				sudo sed -i 's/^dtparam=audio=on/dtparam=audio=off/' /boot/firmware/config.txt || true; \
-				if ! grep -q "^dtparam=audio=off" /boot/firmware/config.txt; then \
-					echo "dtparam=audio=off" | sudo tee -a /boot/firmware/config.txt > /dev/null; \
+				sudo sed -i 's/^dtparam=audio=on/dtparam=audio=off/' $(BOOT_DIR)/config.txt || true; \
+				if ! grep -q "^dtparam=audio=off" $(BOOT_DIR)/config.txt; then \
+					echo "dtparam=audio=off" | sudo tee -a $(BOOT_DIR)/config.txt > /dev/null; \
 				fi; \
 				echo "✅ Onboard audio disabled."; \
 				changed=1; \

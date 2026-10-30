@@ -4,15 +4,19 @@ import threading
 import logging
 from typing import Optional
 
-from librelyrics import LibreLyrics
-from librelyrics.exceptions import RateLimitError, LyricsNotFound
+try:
+    from librelyrics import LibreLyrics
+    from librelyrics.exceptions import RateLimitError, LyricsNotFound
+except ImportError:
+    # librelyrics requires Python 3.10+, so lyrics are unavailable on older systems
+    LibreLyrics = None
 
 logger = logging.getLogger(__name__)
 
 class LyricsFetcher:
     def __init__(self, config):
         self.config = config
-        self.ll: Optional[LibreLyrics] = None
+        self.ll = None
         self.last_track_id: Optional[str] = None
         self.last_lyrics: Optional[dict] = None
         self.rate_limit_until = 0.0
@@ -22,8 +26,11 @@ class LyricsFetcher:
 
     def _setup_librelyrics(self):
         sp_dc = self.config.get('Spotify', 'sp_dc', fallback=None)
-                
-        if sp_dc and len(sp_dc) > 100:
+
+        if LibreLyrics is None:
+            logger.info("Lyrics fetching disabled. LibreLyrics is not installed (requires Python 3.10+).")
+            self.ll = None
+        elif sp_dc and len(sp_dc) > 100:
             try:
                 self.ll = LibreLyrics(config={'plugins': {'spotify': {'sp_dc': sp_dc}}})
                 logger.info("LibreLyrics initialized successfully")

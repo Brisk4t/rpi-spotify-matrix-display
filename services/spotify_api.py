@@ -1,5 +1,6 @@
 # Purpose: Manages Spotify API integration and current playback state polling.
 import os
+import sys
 import time
 import logging
 from dataclasses import dataclass

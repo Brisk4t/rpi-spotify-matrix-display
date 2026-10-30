@@ -37,8 +37,13 @@ def load_config(config_path: str) -> configparser.ConfigParser:
 
 def setup_matrix(config: configparser.ConfigParser, is_emulated: bool):
     if is_emulated:
-        from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
-        import pygame
+        try:
+            from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
+            import pygame
+        except ImportError:
+            logger.error("❌ Error: Could not import 'RGBMatrixEmulator' module.")
+            logger.info("💡 Install the emulator dependencies with: .venv/bin/pip install -e '.[emulator]'")
+            sys.exit(1)
         
         # Clear RGBME's custom logger to prevent duplicate logs
         import logging
