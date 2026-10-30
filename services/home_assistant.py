@@ -70,7 +70,7 @@ class HomeAssistantBridge:
                 "schema": "json",
                 "command_topic": self.light_command,
                 "state_topic": self.light_state,
-                "brightness": True,
+                "supported_color_modes": ["brightness"],
                 "brightness_scale": 100,
             },
             "number/contrast": {
@@ -101,7 +101,7 @@ class HomeAssistantBridge:
 
     def _publish_state(self):
         s = self.settings
-        light = {"state": "ON" if s.on else "OFF", "brightness": s.brightness}
+        light = {"state": "ON" if s.on else "OFF", "brightness": s.brightness, "color_mode": "brightness"}
         self.client.publish(self.light_state, json.dumps(light), retain=True)
         self.client.publish(self.contrast_state, str(s.contrast), retain=True)
         self.client.publish(self.profile_state, s.color_profile, retain=True)
