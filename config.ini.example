@@ -33,3 +33,10 @@ mqtt_password =
 ; discovery_prefix = homeassistant
 ; device_id = spotify_matrix
 ; device_name = Spotify Matrix
+
+[Web]
+; Settings page at http://<pi address>:8000 for changing settings and authorizing Spotify without SSH
+enabled = false
+port = 8000
+; Optional. Anyone on your network can open the page when this is empty
+password =

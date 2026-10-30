@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spotify Matrix</title>
+<style>
+  :root { --bg: #f4f4f5; --card: #fff; --text: #18181b; --muted: #71717a; --line: #e4e4e7; --accent: #1db954; --error: #dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #09090b; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa; --line: #27272a; --error: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 4px 0 16px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+  label.row > span:first-child { flex: 1; }
+  input[type=text], input[type=password], input[type=number], select { width: 55%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+  input[type=range] { width: 55%; accent-color: var(--accent); }
+  input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
+  .value { width: 3.5em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  button, .button { display: inline-block; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  button.secondary { background: var(--line); color: var(--text); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .muted { color: var(--muted); }
+  .error { color: var(--error); }
+  ol { padding-left: 20px; margin: 8px 0; }
+  li { margin-bottom: 8px; }
+  #auth-url { width: 100%; margin-top: 6px; }
+  #status { min-height: 1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Spotify Matrix</h1>
+  <p id="status" class="muted"></p>
+
+  <section>
+    <h2>Display</h2>
+    <div id="display"></div>
+  </section>
+
+  <section>
+    <h2>Spotify</h2>
+    <p id="auth-state"></p>
+    <div id="auth-steps">
+    <ol>
+      <li><a id="auth-link" class="button" target="_blank" rel="noopener">Open Spotify authorization</a></li>
+      <li>After approving, your browser goes to a <code>127.0.0.1</code> page that fails to load. That's expected: copy its address and paste it here.
+        <input id="auth-url" type="text" placeholder="http://127.0.0.1:8080/callback?code=...">
+      </li>
+    </ol>
+    <button id="auth-submit">Authorize</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <p class="muted">Saving restarts the display to apply changes.</p>
+    <div id="fields"></div>
+    <div class="actions">
+      <button id="save">Save &amp; restart</button>
+      <button id="restart" class="secondary">Restart</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (selector) => document.querySelector(selector);
+let fields = [];
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+function setStatus(text, isError = false) {
+  $('#status').textContent = text;
+  $('#status').className = isError ? 'error' : 'muted';
+}
+
+async function api(path, body) {
+  const options = body === undefined ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function setDisplay(changes) {
+  try {
+    await api('/api/display', changes);
+    setStatus('');
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+function renderDisplay(display, ranges, profiles) {
+  const power = el('input', { type: 'checkbox', checked: display.on });
+  power.onchange = () => setDisplay({ on: power.checked });
+
+  const sliders = [['brightness', 'Brightness'], ['contrast', 'Contrast'], ['saturation', 'Saturation']].map(([key, label]) => {
+    const [min, max] = ranges[key];
+    const value = el('span', { className: 'value', textContent: display[key] + '%' });
+    const slider = el('input', { type: 'range', min, max, step: key === 'brightness' ? 1 : 5, value: display[key] });
+    slider.oninput = () => { value.textContent = slider.value + '%'; };
+    slider.onchange = () => setDisplay({ [key]: Number(slider.value) });
+    return el('label', { className: 'row' }, el('span', {}, label), slider, value);
+  });
+
+  const profile = el('select', {}, ...profiles.map((name) => el('option', { value: name, textContent: name })));
+  profile.value = display.color_profile;
+  profile.onchange = () => setDisplay({ color_profile: profile.value });
+
+  $('#display').replaceChildren(
+    el('label', { className: 'row' }, el('span', {}, 'On'), power),
+    ...sliders,
+    el('label', { className: 'row' }, el('span', {}, 'Color profile'), profile),
+  );
+}
+
+function renderFields() {
+  const nodes = [];
+  let section = null;
+  for (const field of fields) {
+    if (field.section !== section) {
+      section = field.section;
+      nodes.push(el('h3', { textContent: section === 'HomeAssistant' ? 'Home Assistant' : section }));
+    }
+    let input;
+    if (field.kind === 'bool') {
+      input = el('input', { type: 'checkbox', checked: field.value });
+    } else if (field.kind === 'select') {
+      input = el('select', {}, ...field.options.map((name) => el('option', { value: name, textContent: name })));
+      input.value = field.value;
+    } else if (field.kind === 'secret') {
+      input = el('input', { type: 'password', autocomplete: 'new-password', placeholder: field.is_set ? 'Saved (leave empty to keep)' : 'Not set' });
+    } else {
+      const numeric = field.kind === 'int' || field.kind === 'float';
+      input = el('input', { type: numeric ? 'number' : 'text', value: field.value, step: field.kind === 'float' ? 'any' : 1 });
+    }
+    field.input = input;
+    nodes.push(el('label', { className: 'row' }, el('span', {}, field.label), input));
+  }
+  $('#fields').replaceChildren(...nodes);
+}
+
+function changedFields() {
+  const changes = {};
+  for (const field of fields) {
+    const value = field.kind === 'bool' ? field.input.checked : field.input.value;
+    if (field.kind === 'secret' ? value !== '' : value !== field.value) changes[field.id] = value;
+  }
+  return changes;
+}
+
+// includeFields re-renders the settings form, which would discard unsaved edits
+async function load(includeFields = true) {
+  const state = await api('/api/state');
+  renderDisplay(state.display, state.ranges, state.profiles);
+
+  $('#auth-state').textContent = !state.auth.configured
+    ? '⚠️ Enter your Spotify client ID and secret under Settings and save, then authorize here.'
+    : state.auth.authorized
+    ? '✅ Connected. Authorize again only to switch accounts or fix a revoked token.'
+    : '⚠️ Not connected. Authorize to start showing playback.';
+  $('#auth-steps').hidden = !state.auth.configured;
+  $('#auth-link').href = state.auth.url || '#';
+
+  if (includeFields) {
+    fields = state.fields;
+    renderFields();
+  }
+}
+
+async function waitForRestart() {
+  setStatus('Restarting… this can take a while on a Pi Zero.');
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  for (let i = 0; i < 40; i++) {
+    try {
+      await load();
+      setStatus('Restarted ✅');
+      return;
+    } catch (e) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+  setStatus('The display did not come back. Check matrix.log on the Pi.', true);
+}
+
+$('#auth-submit').onclick = async () => {
+  try {
+    await api('/api/auth', { url: $('#auth-url').value });
+    $('#auth-url').value = '';
+    await load(false);
+    setStatus('Spotify connected 🎉');
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+};
+
+$('#save').onclick = async () => {
+  const changes = changedFields();
+  if (!Object.keys(changes).length) {
+    setStatus('Nothing changed.');
+    return;
+  }
+  try {
+    await api('/api/config', changes);
+    await waitForRestart();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+};
+
+$('#restart').onclick = async () => {
+  try {
+    await api('/api/restart', {});
+    await waitForRestart();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+};
+
+// Pick up changes made from Home Assistant while the page was in the background
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) load(false).catch(() => {});
+});
+
+load().catch((e) => setStatus(e.message, true));
+</script>
+</body>
+</html>

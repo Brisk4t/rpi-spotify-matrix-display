@@ -2,6 +2,7 @@
 
 import argparse
 import configparser
+import socket
 import sys
 import time
 import warnings
@@ -12,9 +13,12 @@ from pathlib import Path
 from services.spotify_api import SpotifyModule
 from player.spotify_player import SpotifyPlayer
 from player.display_settings import DisplaySettings
+from utils.file_utils import write_atomic
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+CONFIG_TEMPLATE_PATH = 'config.ini.example'
 
 def setup_logging():
     logging.basicConfig(
@@ -29,11 +33,21 @@ def setup_logging():
 def load_config(config_path: str) -> configparser.ConfigParser:
     config = configparser.ConfigParser()
 
+    created = False
     if not Path(config_path).exists():
-        logger.error(f"Configuration file not found: {config_path}")
-        sys.exit(1)
+        if not Path(CONFIG_TEMPLATE_PATH).exists():
+            logger.error(f"Configuration file not found: {config_path}")
+            sys.exit(1)
+        # First run: start from the template with the settings page on, so setup can be finished in a browser
+        from services.web_server import update_config_file
+        write_atomic(config_path, Path(CONFIG_TEMPLATE_PATH).read_text())
+        update_config_file(config_path, {'Web': {'enabled': 'true'}})
+        created = True
     
     config.read(config_path)
+    if created:
+        port = config.getint('Web', 'port', fallback=8000)
+        logger.info(f"Created {config_path} from {CONFIG_TEMPLATE_PATH}. Finish setup at http://{socket.gethostname()}.local:{port}")
     return config
 
 
@@ -109,6 +123,9 @@ def main():
         if config.getboolean('HomeAssistant', 'enabled', fallback=False):
             from services.home_assistant import HomeAssistantBridge
             HomeAssistantBridge(config, settings).start()
+        if config.getboolean('Web', 'enabled', fallback=False):
+            from services.web_server import WebServer
+            WebServer(config, settings, spotify_module).start()
         
         off_frame = Image.new("RGB", (64, 64))
         target_fps = config.getint('Player', 'target_fps', fallback=60)

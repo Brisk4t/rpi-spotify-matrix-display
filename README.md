@@ -57,6 +57,18 @@ The display can be controlled from Home Assistant over MQTT. Install the Mosquit
 
 Settings are restored after a restart.
 
+## 🌐 Settings page
+
+To change settings without SSH, set `enabled = true` under `[Web]` in `config.ini` and restart the display. Then open `http://<pi address>:8000` from any device on your network to:
+
+- Adjust the same display controls Home Assistant has
+- Edit `config.ini` settings (saving restarts the display to apply them)
+- Authorize Spotify: open the link, approve, then paste the address of the `127.0.0.1` page that fails to load
+
+On a fresh install, the display creates `config.ini` from `config.ini.example` with the page already enabled, so setup can be finished in the browser at `http://<hostname>.local:8000` (the address is also logged).
+
+Secrets such as the client secret are never shown on the page. Set `password` under `[Web]` to require a password, and don't expose the page outside your network.
+
 ## 💬 FAQ
 
 <details>

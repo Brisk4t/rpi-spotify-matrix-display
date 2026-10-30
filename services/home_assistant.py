@@ -2,7 +2,7 @@
 import json
 import logging
 
-from player.display_settings import DisplaySettings, COLOR_PROFILES
+from player.display_settings import DisplaySettings, COLOR_PROFILES, RANGES
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +10,7 @@ class HomeAssistantBridge:
     """
     Publishes a light (on/off + brightness), contrast and saturation numbers and a color profile select
     to Home Assistant using MQTT discovery, and applies incoming commands to DisplaySettings.
-    Commands are retained so the last settings are restored after a restart.
+    State is published on every settings change, including changes made from the web page.
     """
     def __init__(self, config, settings: DisplaySettings):
         self.settings = settings
@@ -47,6 +47,7 @@ class HomeAssistantBridge:
         self.client.will_set(self.status_topic, "offline", retain=True)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
+        self.settings.add_listener(lambda settings: self._publish_state())
         self.client.connect_async(self.host, self.port)
         self.client.loop_start()
         logger.info(f"Connecting to Home Assistant MQTT broker at {self.host}:{self.port}")
@@ -56,6 +57,10 @@ class HomeAssistantBridge:
             logger.error(f"Home Assistant MQTT connection failed: {reason_code}")
             return
         logger.info("Connected to Home Assistant MQTT broker 🏠")
+        # Older versions retained commands, which would overwrite settings changed elsewhere on every restart
+        commands = (self.light_command, self.contrast_command, self.saturation_command, self.profile_command)
+        for topic in commands:
+            client.publish(topic, None, retain=True)
         client.subscribe([(self.light_command, 0), (self.contrast_command, 0), (self.saturation_command, 0),
                           (self.profile_command, 0), (f"{self.discovery_prefix}/status", 0)])
         self._publish_discovery()
@@ -64,7 +69,7 @@ class HomeAssistantBridge:
 
     def _publish_discovery(self):
         device = {"identifiers": [self.device_id], "name": self.device_name, "model": "rpi-spotify-matrix-display"}
-        common = {"availability_topic": self.status_topic, "device": device, "retain": True}
+        common = {"availability_topic": self.status_topic, "device": device}
         entities = {
             "light/display": {
                 "name": None,
@@ -80,8 +85,8 @@ class HomeAssistantBridge:
                 "unique_id": f"{self.device_id}_contrast",
                 "command_topic": self.contrast_command,
                 "state_topic": self.contrast_state,
-                "min": 0,
-                "max": 200,
+                "min": RANGES['contrast'][0],
+                "max": RANGES['contrast'][1],
                 "step": 5,
                 "unit_of_measurement": "%",
                 "mode": "slider",
@@ -92,8 +97,8 @@ class HomeAssistantBridge:
                 "unique_id": f"{self.device_id}_saturation",
                 "command_topic": self.saturation_command,
                 "state_topic": self.saturation_state,
-                "min": 0,
-                "max": 200,
+                "min": RANGES['saturation'][0],
+                "max": RANGES['saturation'][1],
                 "step": 5,
                 "unit_of_measurement": "%",
                 "mode": "slider",
@@ -124,6 +129,8 @@ class HomeAssistantBridge:
     def _on_message(self, client, userdata, msg):
         try:
             payload = msg.payload.decode()
+            if not payload:
+                return
             if msg.topic == f"{self.discovery_prefix}/status":
                 # Home Assistant restarted, so announce the entities again
                 if payload == "online":
@@ -137,20 +144,13 @@ class HomeAssistantBridge:
                 if "state" in command:
                     changes["on"] = command["state"] == "ON"
                 if "brightness" in command:
-                    changes["brightness"] = max(1, min(100, int(command["brightness"])))
+                    changes["brightness"] = command["brightness"]
                 self.settings.update(**changes)
             elif msg.topic == self.contrast_command:
-                self.settings.update(contrast=max(0, min(200, int(float(payload)))))
+                self.settings.update(contrast=payload)
             elif msg.topic == self.saturation_command:
-                self.settings.update(saturation=max(0, min(200, int(float(payload)))))
+                self.settings.update(saturation=payload)
             elif msg.topic == self.profile_command:
-                if payload not in COLOR_PROFILES:
-                    logger.warning(f"Unknown color profile from Home Assistant: {payload}")
-                    return
                 self.settings.update(color_profile=payload)
-            else:
-                return
-
-            self._publish_state()
         except Exception as e:
             logger.error(f"Invalid Home Assistant command on {msg.topic}: {e}")

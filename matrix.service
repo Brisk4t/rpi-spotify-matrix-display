@@ -1,9 +1,13 @@
 [Unit]
 Description=rpi-spotify-matrix-display
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 WorkingDirectory=__WORKING_DIR__
 ExecStart=__WORKING_DIR__/.venv/bin/python3 __WORKING_DIR__/main.py
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=default.target

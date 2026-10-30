@@ -75,6 +75,10 @@ class SpotifyModule:
             )
             
             if needs_auth:
+                if not (sys.stdin and sys.stdin.isatty()):
+                    logger.warning("Spotify authorization required. Authorize from the web page, or stop the service and run 'make run'.")
+                    return
+
                 # Force authentication immediately so we can show the instructions
                 auth_manager.get_access_token(as_dict=False)
                 print("\n" + "="*70)
@@ -95,13 +99,32 @@ class SpotifyModule:
         except Exception as e:
             logger.error(f"Spotify setup failed: {e}")
 
+    @property
+    def is_authorized(self) -> bool:
+        return bool(self.spotify and self.spotify.auth_manager.cache_handler.get_cached_token())
+
+    def get_authorize_url(self) -> Optional[str]:
+        return self.spotify.auth_manager.get_authorize_url() if self.spotify else None
+
+    def authorize(self, response: str):
+        """
+        Completes authorization with the URL Spotify redirected the browser to (or just its code).
+        The redirect to 127.0.0.1 fails to load in the browser, but its URL still carries the code.
+        """
+        if not self.spotify:
+            raise RuntimeError("Spotify is not set up. Check the client ID and secret.")
+        auth_manager = self.spotify.auth_manager
+        code = auth_manager.parse_response_code(response.strip())
+        auth_manager.get_access_token(code, as_dict=False, check_cache=False)
+        logger.info("Spotify authentication successful 🎉")
+
     def get_current_playback(self) -> Optional[PlaybackInfo]:
         """
         Polls the Spotify API for the current playback state.
         Returns a PlaybackInfo object if music is playing on a whitelisted device, otherwise None.
         Handles rate limits and token refreshes automatically.
         """
-        if not self.spotify or time.time() < self.rate_limit_until:
+        if not self.is_authorized or time.time() < self.rate_limit_until:
             return None
 
         try:
