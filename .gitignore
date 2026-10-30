@@ -8,3 +8,4 @@ bin
 *.egg-info
 config.ini
 matrix.log
+rpi-rgb-led-matrix

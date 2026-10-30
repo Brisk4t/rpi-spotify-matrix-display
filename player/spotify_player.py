@@ -33,7 +33,7 @@ class SpotifyPlayer:
         self.config = config
         
         self.fetch_interval = config.getint('Spotify', 'fetch_interval', fallback=1)
-        self.idle_fetch_interval = config.getfloat('Spotify', 'idle_fetch_interval', fallback=5.0)
+        self.idle_fetch_interval = config.getfloat('Spotify', 'idle_fetch_interval', fallback=self.fetch_interval)
         self.fullscreen_delay = config.getfloat('Player', 'fullscreen_delay', fallback=10.0)
         self.shutdown_delay = config.getfloat('Player', 'shutdown_delay', fallback=30.0)
 
