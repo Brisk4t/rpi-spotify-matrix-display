@@ -52,6 +52,7 @@ The display can be controlled from Home Assistant over MQTT. Install the Mosquit
 
 - **Light**: turn the display on/off and set its brightness
 - **Contrast**: 0-200% (100% is unchanged)
+- **Saturation**: 0-200% (0% is grayscale, 100% is unchanged)
 - **Color profile**: Neutral, Warm, Cool or Night
 
 Settings are restored after a restart.

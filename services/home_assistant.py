@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class HomeAssistantBridge:
     """
-    Publishes a light (on/off + brightness), a contrast number and a color profile select
+    Publishes a light (on/off + brightness), contrast and saturation numbers and a color profile select
     to Home Assistant using MQTT discovery, and applies incoming commands to DisplaySettings.
     Commands are retained so the last settings are restored after a restart.
     """
@@ -28,6 +28,8 @@ class HomeAssistantBridge:
         self.light_state = f"{base}/light/state"
         self.contrast_command = f"{base}/contrast/set"
         self.contrast_state = f"{base}/contrast/state"
+        self.saturation_command = f"{base}/saturation/set"
+        self.saturation_state = f"{base}/saturation/state"
         self.profile_command = f"{base}/color_profile/set"
         self.profile_state = f"{base}/color_profile/state"
         self.client = None
@@ -54,8 +56,8 @@ class HomeAssistantBridge:
             logger.error(f"Home Assistant MQTT connection failed: {reason_code}")
             return
         logger.info("Connected to Home Assistant MQTT broker 🏠")
-        client.subscribe([(self.light_command, 0), (self.contrast_command, 0), (self.profile_command, 0),
-                          (f"{self.discovery_prefix}/status", 0)])
+        client.subscribe([(self.light_command, 0), (self.contrast_command, 0), (self.saturation_command, 0),
+                          (self.profile_command, 0), (f"{self.discovery_prefix}/status", 0)])
         self._publish_discovery()
         client.publish(self.status_topic, "online", retain=True)
         self._publish_state()
@@ -85,6 +87,18 @@ class HomeAssistantBridge:
                 "mode": "slider",
                 "icon": "mdi:contrast-box",
             },
+            "number/saturation": {
+                "name": "Saturation",
+                "unique_id": f"{self.device_id}_saturation",
+                "command_topic": self.saturation_command,
+                "state_topic": self.saturation_state,
+                "min": 0,
+                "max": 200,
+                "step": 5,
+                "unit_of_measurement": "%",
+                "mode": "slider",
+                "icon": "mdi:palette-swatch",
+            },
             "select/color_profile": {
                 "name": "Color profile",
                 "unique_id": f"{self.device_id}_color_profile",
@@ -104,6 +118,7 @@ class HomeAssistantBridge:
         light = {"state": "ON" if s.on else "OFF", "brightness": s.brightness, "color_mode": "brightness"}
         self.client.publish(self.light_state, json.dumps(light), retain=True)
         self.client.publish(self.contrast_state, str(s.contrast), retain=True)
+        self.client.publish(self.saturation_state, str(s.saturation), retain=True)
         self.client.publish(self.profile_state, s.color_profile, retain=True)
 
     def _on_message(self, client, userdata, msg):
@@ -126,6 +141,8 @@ class HomeAssistantBridge:
                 self.settings.update(**changes)
             elif msg.topic == self.contrast_command:
                 self.settings.update(contrast=max(0, min(200, int(float(payload)))))
+            elif msg.topic == self.saturation_command:
+                self.settings.update(saturation=max(0, min(200, int(float(payload)))))
             elif msg.topic == self.profile_command:
                 if payload not in COLOR_PROFILES:
                     logger.warning(f"Unknown color profile from Home Assistant: {payload}")

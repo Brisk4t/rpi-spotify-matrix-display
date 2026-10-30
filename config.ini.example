@@ -2,6 +2,7 @@
 hardware_mapping = adafruit-hat-pwm
 brightness = 50
 contrast = 100
+saturation = 100
 ; Neutral, Warm, Cool or Night
 color_profile = Neutral
 gpio_slowdown = 2
