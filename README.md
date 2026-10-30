@@ -46,6 +46,16 @@ The display supports two methods of displaying lyrics. You can choose your prefe
 
 You can configure the display using the `config.ini`. Use it to update your [hardware mapping](https://github.com/hzeller/rpi-rgb-led-matrix#changing-parameters-via-command-line-flags) (may be required), opt for fullscreen artwork, adjust timings, or permit only certain playback devices to activate the display.
 
+## 🏠 Home Assistant
+
+The display can be controlled from Home Assistant over MQTT. Install the Mosquitto broker add-on, then set `enabled = true` and your broker details under `[HomeAssistant]` in `config.ini`. The display is added automatically as a device with:
+
+- **Light**: turn the display on/off and set its brightness
+- **Contrast**: 0-200% (100% is unchanged)
+- **Color profile**: Neutral, Warm, Cool or Night
+
+Settings are restored after a restart.
+
 ## 💬 FAQ
 
 <details>

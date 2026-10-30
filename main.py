@@ -11,6 +11,8 @@ from pathlib import Path
 
 from services.spotify_api import SpotifyModule
 from player.spotify_player import SpotifyPlayer
+from player.display_settings import DisplaySettings
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +104,13 @@ def main():
         
         matrix = setup_matrix(config, args.emulate)
         
+        # The emulator always runs at full brightness (see setup_matrix), so brightness is applied in software there
+        settings = DisplaySettings(config, software_brightness=args.emulate)
+        if config.getboolean('HomeAssistant', 'enabled', fallback=False):
+            from services.home_assistant import HomeAssistantBridge
+            HomeAssistantBridge(config, settings).start()
+        
+        off_frame = Image.new("RGB", (64, 64))
         target_fps = config.getint('Player', 'target_fps', fallback=60)
         target_frame_time = 1.0 / target_fps
         
@@ -109,13 +118,24 @@ def main():
         last_time = next_frame_time
         last_frame = None
         last_frame_bytes = None
+        settings_version = None
 
         while True:
             now = time.perf_counter()
             delta_time = now - last_time
             last_time = now
 
-            frame = spotify_player.generate(delta_time)
+            if settings.version != settings_version:
+                settings_version = settings.version
+                if not args.emulate:
+                    matrix.brightness = settings.brightness
+                # Hardware brightness only applies to newly set pixels, so push the next frame again
+                last_frame = last_frame_bytes = None
+
+            if settings.on:
+                frame = settings.apply(spotify_player.generate(delta_time))
+            else:
+                frame = off_frame
 
             if frame:
                 # Only push frames that changed. The emulator handles its window events

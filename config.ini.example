@@ -1,6 +1,9 @@
 [Matrix]
 hardware_mapping = adafruit-hat-pwm
 brightness = 50
+contrast = 100
+; Neutral, Warm, Cool or Night
+color_profile = Neutral
 gpio_slowdown = 2
 
 [Player]
@@ -19,3 +22,13 @@ sp_dc = <YOUR SP_DC COOKIE FOR LYRICS>
 fetch_interval = 1
 ; idle_fetch_interval = 5
 ; device_whitelist = ['Marantz AVR', 'Samsung TV']
+
+[HomeAssistant]
+enabled = false
+mqtt_host = homeassistant.local
+mqtt_port = 1883
+mqtt_username =
+mqtt_password =
+; discovery_prefix = homeassistant
+; device_id = spotify_matrix
+; device_name = Spotify Matrix
