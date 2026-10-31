@@ -46,6 +46,7 @@ install: ## Install dependencies and request Spotify credentials
 		sed "s/client_secret = <YOUR_CLIENT_SECRET_HERE>/client_secret = $$client_secret/" config.ini > config.ini.tmp && mv config.ini.tmp config.ini; \
 		if [ -n "$$sp_dc" ]; then \
 			sed "s|sp_dc = <YOUR SP_DC COOKIE FOR LYRICS>|sp_dc = $$sp_dc|" config.ini > config.ini.tmp && mv config.ini.tmp config.ini; \
+			sed "s/^lyrics = false/lyrics = true/" config.ini > config.ini.tmp && mv config.ini.tmp config.ini; \
 		fi; \
 	fi
 	@echo ""

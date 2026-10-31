@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from player.display_settings import DisplaySettings, COLOR_PROFILES, RANGES
+from services.lyrics_api import LYRICS_PROVIDERS
 from utils.file_utils import write_atomic
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,8 @@ CONFIG_FIELDS = [
     ('Spotify', 'client_id', 'Client ID', 'text'),
     ('Spotify', 'client_secret', 'Client secret', 'secret'),
     ('Spotify', 'sp_dc', 'sp_dc cookie (lyrics)', 'secret'),
+    ('Spotify', 'lyrics', 'Lyrics', 'bool'),
+    ('Spotify', 'lyrics_provider', 'Lyrics provider', 'select', LYRICS_PROVIDERS),
     ('Spotify', 'fetch_interval', 'Fetch interval (s)', 'int'),
     ('Spotify', 'idle_fetch_interval', 'Idle fetch interval (s)', 'float'),
     ('Spotify', 'device_whitelist', 'Device whitelist', 'text'),

@@ -20,6 +20,9 @@ shutdown_delay = 30
 client_id = <YOUR_CLIENT_ID_HERE>
 client_secret = <YOUR_CLIENT_SECRET_HERE>
 sp_dc = <YOUR SP_DC COOKIE FOR LYRICS>
+lyrics = false
+; builtin, or librelyrics (Python 3.10+, install with: .venv/bin/pip install -e '.[librelyrics]')
+lyrics_provider = builtin
 fetch_interval = 1
 ; idle_fetch_interval = 5
 ; device_whitelist = ['Marantz AVR', 'Samsung TV']

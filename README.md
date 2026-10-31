@@ -38,6 +38,11 @@ After starting the display, follow the instructions in the console. The pasted l
 
 The display supports two methods of displaying lyrics. You can choose your preference by setting `dedicated_lyrics` to true or false in the configuration file.
 
+Lyrics are off by default. To show them, set `lyrics = true` under `[Spotify]` and provide your `sp_dc` cookie. `lyrics_provider` picks how they're fetched:
+
+- `builtin` (default): a small built-in client that only needs `requests` and works on Python 3.9
+- `librelyrics`: the [LibreLyrics](https://github.com/libre-lyrics/librelyrics) library (Python 3.10+, install it with `.venv/bin/pip install -e '.[librelyrics]'`). It may pick up fixes sooner when Spotify changes its login
+
 | Standard Lyrics (default) | Dedicated Lyrics |
 | --- | --- |
 | <img src="images/standard.gif" width="256"> | <img src="images/dedicated.gif" width="256"> |
@@ -111,7 +116,7 @@ Don't have a Raspberry Pi or LED matrix yet? No worries! Play around with the em
 
 - [Adafruit 64x64 RGB LED Matrix - 2.5mm Pitch - 1/32 Scan](https://www.adafruit.com/product/3649)
 - [Adafruit RGB Matrix Bonnet for Raspberry Pi](https://www.adafruit.com/product/3211)
-- [Raspberry Pi 3B+](https://www.raspberrypi.com/products/raspberry-pi-3-model-b-plus/) (or newer; a Pi Zero also works using 32-bit Raspberry Pi OS Lite, Python 3.9+. Lyrics require Python 3.10+)
+- [Raspberry Pi 3B+](https://www.raspberrypi.com/products/raspberry-pi-3-model-b-plus/) (or newer; a Pi Zero also works using 32-bit Raspberry Pi OS Lite, Python 3.9+)
 - Any microSD card
 - [5V 10A Power Supply Adapter](https://www.amazon.com/gp/product/B08HCS1X66)
 

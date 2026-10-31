@@ -17,12 +17,14 @@ dependencies = [
     "paho-mqtt>=2.0",
     "requests",
     "spotipy",
-    # Lyrics are optional; librelyrics requires Python 3.10+
-    "librelyrics ; python_version >= '3.10'",
-    "librelyrics-spotify ; python_version >= '3.10'",
 ]
 
 [project.optional-dependencies]
+# Only for lyrics_provider = librelyrics; the built-in lyrics client needs nothing extra
+librelyrics = [
+    "librelyrics",
+    "librelyrics-spotify",
+]
 emulator = [
     "RGBMatrixEmulator",
     "pygame",
