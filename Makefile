@@ -99,6 +99,8 @@ check-rpi:
 		exit 1; \
 	fi
 
+# The pinned binding casts Pillow's signed image pointer straight to uintptr_t, which overflows for
+# addresses above 2 GB on 32-bit Pis (e.g. the Pi Zero), so the build patches it to cast through Py_ssize_t
 rpi-rgbmatrix: check-venv check-rpi ## Raspberry Pi ONLY - Build and install the rgbmatrix library
 	@if .venv/bin/python -c 'import rgbmatrix' >/dev/null 2>&1; then \
 		echo "✅ rgbmatrix is already installed."; \
@@ -108,6 +110,7 @@ rpi-rgbmatrix: check-venv check-rpi ## Raspberry Pi ONLY - Build and install the
 		git -C rpi-rgb-led-matrix init -q && \
 		git -C rpi-rgb-led-matrix fetch -q --depth 1 $(RGBMATRIX_REPO) $(RGBMATRIX_COMMIT) && \
 		git -C rpi-rgb-led-matrix checkout -q FETCH_HEAD && \
+		sed -i 's/(<uintptr_t>ptr_tmp)/(<uintptr_t><Py_ssize_t>ptr_tmp)/' rpi-rgb-led-matrix/bindings/python/rgbmatrix/core.pyx && \
 		.venv/bin/pip install --prefer-binary "cython>=3" && \
 		$(MAKE) -C rpi-rgb-led-matrix/lib && \
 		$(MAKE) -C rpi-rgb-led-matrix/bindings/python/rgbmatrix CYTHON=$(CURDIR)/.venv/bin/cython && \

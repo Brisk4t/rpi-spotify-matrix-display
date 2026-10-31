@@ -102,6 +102,24 @@ def setup_matrix(config: configparser.ConfigParser, is_emulated: bool):
     return matrix
 
 
+_warned_unsafe_set_image = False
+
+def set_image(matrix, frame):
+    """
+    Pushes a frame to the matrix. rgbmatrix builds without the Makefile's pointer patch can't read images
+    stored above 2 GB on 32-bit Pis, so those frames fall back to the slower safe copy instead of crashing.
+    """
+    global _warned_unsafe_set_image
+    try:
+        matrix.SetImage(frame)
+    except OverflowError:
+        if not _warned_unsafe_set_image:
+            _warned_unsafe_set_image = True
+            logger.warning("rgbmatrix can't read some frames directly, so they are copied slowly. "
+                           "Rebuild it with: .venv/bin/pip uninstall -y rgbmatrix && make rpi-rgbmatrix")
+        matrix.SetImage(frame, unsafe=False)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Raspberry Pi Spotify Matrix Display')
     parser.add_argument('-e', '--emulate', action='store_true', help='run within an emulator window')
@@ -160,7 +178,7 @@ def main():
                 if frame is not last_frame or args.emulate:
                     frame_bytes = frame.tobytes()
                     if frame_bytes != last_frame_bytes or args.emulate:
-                        matrix.SetImage(frame)
+                        set_image(matrix, frame)
                         last_frame_bytes = frame_bytes
                     last_frame = frame
             else:
