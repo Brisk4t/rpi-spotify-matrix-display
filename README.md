@@ -5,6 +5,15 @@
   <a href="https://www.buymeacoffee.com/kylejohnsonkj"><img src="https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-yellow.svg" alt="BuyMeACoffee"></a>
 </div>
 
+## 🪶 Lite
+
+This version of the display is made to run well on small Pis such as the Pi Zero:
+
+- Runs on Python 3.9+ (Raspberry Pi OS Bullseye and newer) with fewer dependencies. The emulator packages are only installed on non-Pi machines.
+- Uses less CPU: it downloads the smallest album art that covers the matrix, only redraws when something on screen changes, and can poll Spotify less often while nothing is playing.
+- Adds display controls (brightness, contrast, saturation and color profile), [Home Assistant](#-home-assistant) support and a [settings page](#-settings-page) for setup without SSH.
+- Includes a small built-in client, so [lyrics](#-lyrics-support) work without LibreLyrics.
+
 ## 🔑 Spotify Setup
 1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Create a new app _(name/description can be anything)_
@@ -32,6 +41,20 @@ make help     # List available commands
 
 After starting the display, follow the instructions in the console. The pasted link should begin with http://127.0.0.1:8080/callback. After successful authorization, play a song and the display will appear! ✅
 
+### Running in the background
+
+`make run` also installs a systemd service. Once Spotify is authorized, start the display on every boot with:
+
+```bash
+sudo systemctl enable --now matrix
+```
+
+Then use `matrix start`, `matrix stop`, `matrix restart` and `matrix status` to control it. The service waits for the network and restarts the display if it crashes. Logs are written to `matrix.log`.
+
+If the service was installed by an older version, reinstall it to get the automatic restart: `sudo rm /etc/systemd/system/matrix.service && make rpi-service`, then run `sudo systemctl daemon-reload`.
+
+With the [settings page](#-settings-page) enabled, Spotify can also be authorized from the browser, without a terminal.
+
 ---
 
 ## 🎵 Lyrics Support
@@ -49,18 +72,32 @@ Lyrics are off by default. To show them, set `lyrics = true` under `[Spotify]` a
 
 ## 🧩 Configuration
 
-You can configure the display using the `config.ini`. Use it to update your [hardware mapping](https://github.com/hzeller/rpi-rgb-led-matrix#changing-parameters-via-command-line-flags) (may be required), opt for fullscreen artwork, adjust timings, or permit only certain playback devices to activate the display.
+You can configure the display using the `config.ini` or the [settings page](#-settings-page). Use it to update your [hardware mapping](https://github.com/hzeller/rpi-rgb-led-matrix#changing-parameters-via-command-line-flags) (may be required), opt for fullscreen artwork, adjust timings, or permit only certain playback devices to activate the display.
+
+The display settings under `[Matrix]` are:
+
+- `brightness`: 1-100
+- `contrast` and `saturation`: 0-200 (100 is unchanged, and a saturation of 0 is grayscale)
+- `color_profile`: Neutral, Warm, Cool or Night
+
+These are starting values. Changes made from Home Assistant or the settings page are saved to `settings.json` and take priority over them. Delete `settings.json` to go back to the `config.ini` values.
+
+**Tips for a Pi Zero**
+
+- `target_fps = 30` halves the drawing work compared to the default of 60
+- `idle_fetch_interval = 5` under `[Spotify]` polls Spotify every 5 seconds while nothing is playing (by default it uses `fetch_interval`)
+- `gpio_slowdown = 0` or `1` usually works, since the Pi Zero is slower than other Pis. Raise it if the display flickers
 
 ## 🏠 Home Assistant
 
-The display can be controlled from Home Assistant over MQTT. Install the Mosquitto broker add-on, then set `enabled = true` and your broker details under `[HomeAssistant]` in `config.ini`. The display is added automatically as a device with:
+The display can be controlled from Home Assistant over MQTT. You need an MQTT broker: the Mosquitto broker add-on, or the `eclipse-mosquitto` Docker image if you run Home Assistant Container. Add the MQTT integration in Home Assistant, then set `enabled = true` and your broker details under `[HomeAssistant]` in `config.ini`. The display is added automatically as a device with:
 
 - **Light**: turn the display on/off and set its brightness
 - **Contrast**: 0-200% (100% is unchanged)
 - **Saturation**: 0-200% (0% is grayscale, 100% is unchanged)
 - **Color profile**: Neutral, Warm, Cool or Night
 
-Settings are restored after a restart.
+Changes made from Home Assistant and from the settings page stay in sync, and are restored after a restart.
 
 ## 🌐 Settings page
 
@@ -73,6 +110,8 @@ To change settings without SSH, set `enabled = true` under `[Web]` in `config.in
 On a fresh install, the display creates `config.ini` from `config.ini.example` with the page already enabled, so setup can be finished in the browser at `http://<hostname>.local:8000` (the address is also logged).
 
 Secrets such as the client secret are never shown on the page. Set `password` under `[Web]` to require a password, and don't expose the page outside your network.
+
+If the address shows another web server's page (such as "Welcome to nginx"), check that it includes the port `:8000`. Set `port` under `[Web]` to use a different one.
 
 ## 💬 FAQ
 
@@ -91,7 +130,9 @@ Spotify is likely set to video playback mode and is sending a still from the vid
 <details>
 <summary><b>Where do I get my `sp_dc` for lyrics?</b></summary>
 
-[See this guide](https://github.com/akashrchandran/syrics/wiki/Finding-sp_dc) to find your sp_dc cookie. Skip this step if you do not want to show lyrics.
+[See this guide](https://github.com/akashrchandran/syrics/wiki/Finding-sp_dc) to find your sp_dc cookie, then set `lyrics = true` under `[Spotify]`. Skip this step if you do not want to show lyrics.
+
+The cookie stops working if you log out of the browser session you copied it from, so close that window instead of logging out.
 </details>
 
 <details>
@@ -101,9 +142,21 @@ When playing to a Spotify Connect destination, lyrics may start out delayed due 
 </details>
 
 <details>
+<summary><b>The display crashed with "OverflowError: can't convert negative value to size_t".</b></summary>
+
+This is a bug in rgbmatrix builds from older versions of this project, and it happens on 32-bit Pis such as the Pi Zero. The display now works around it by copying those frames slowly, so rebuild the library to fix it properly:
+
+```bash
+matrix stop
+.venv/bin/pip uninstall -y rgbmatrix && make rpi-rgbmatrix
+matrix start
+```
+</details>
+
+<details>
 <summary><b>Why does the API get called every second?</b></summary>
 
-Spotify's API does not provide public websocket support, so the only way to determine playback status and track progression is by polling the API regularly. You can increase this polling interval in `config.ini` if you want to reduce the number of calls.
+Spotify's API does not provide public websocket support, so the only way to determine playback status and track progression is by polling the API regularly. You can increase this polling interval in `config.ini` if you want to reduce the number of calls, or set `idle_fetch_interval` to poll less often only while nothing is playing.
 </details>
 
 ---
@@ -130,7 +183,7 @@ Once you have all the parts, proceed with the Rasperry Pi Setup below!
 #### Step 1: Install Pi OS
 - [Download and open the Raspberry Pi Imager](https://www.raspberrypi.com/software/)
     - Select your Raspberry Pi
-    - Select `Raspberry Pi OS (other) - Raspberry Pi OS Lite (64-bit)`
+    - Select `Raspberry Pi OS (other) - Raspberry Pi OS Lite (64-bit)`, or the 32-bit version for an original Pi Zero / Zero W, which can't run 64-bit
     - Select your microSD card
 - Tap "Next" and edit OS customization settings
     - Set hostname (I put matrix), set user/pass (I kept user as pi)
@@ -159,5 +212,7 @@ https://github.com/user-attachments/assets/9bf163f9-8e0f-47cc-b2d2-a62b3a975471
 - **allenslab** for inspiring this project with the original [matrix-dashboard](https://www.reddit.com/r/3Dprinting/comments/ujyy4g/i_designed_and_3d_printed_a_led_matrix_dashboard/)
 - **typorter** for his continued work on [RGBMatrixEmulator](https://github.com/ty-porter/RGBMatrixEmulator)
 - **spotipy contributors** for the Spotify Web API [python wrapper](https://github.com/spotipy-dev/spotipy)
-- **akashrchandran** for [LibreLyrics](https://github.com/libre-lyrics/librelyrics) (and specifically the Spotify [plugin](https://github.com/libre-lyrics/librelyrics-spotify))
+- **akashrchandran** for [LibreLyrics](https://github.com/libre-lyrics/librelyrics) (and specifically the Spotify [plugin](https://github.com/libre-lyrics/librelyrics-spotify), which the built-in lyrics client is ported from)
+- **ThetaDev** for the [spotify-secrets](https://code.thetadev.de/ThetaDev/spotify-secrets) list the lyrics client uses
+- **Eclipse Paho** for the Python [MQTT client](https://github.com/eclipse-paho/paho.mqtt.python)
 - **hzeller** for the essential [rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix) library
