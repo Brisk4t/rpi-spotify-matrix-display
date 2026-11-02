@@ -1,5 +1,6 @@
 # Purpose: Manages Spotify API integration and current playback state polling.
 import os
+import sys
 import time
 import logging
 from dataclasses import dataclass
@@ -74,6 +75,10 @@ class SpotifyModule:
             )
             
             if needs_auth:
+                if not (sys.stdin and sys.stdin.isatty()):
+                    logger.warning("Spotify authorization required. Authorize from the web page, or stop the service and run 'make run'.")
+                    return
+
                 # Force authentication immediately so we can show the instructions
                 auth_manager.get_access_token(as_dict=False)
                 print("\n" + "="*70)
@@ -94,13 +99,32 @@ class SpotifyModule:
         except Exception as e:
             logger.error(f"Spotify setup failed: {e}")
 
+    @property
+    def is_authorized(self) -> bool:
+        return bool(self.spotify and self.spotify.auth_manager.cache_handler.get_cached_token())
+
+    def get_authorize_url(self) -> Optional[str]:
+        return self.spotify.auth_manager.get_authorize_url() if self.spotify else None
+
+    def authorize(self, response: str):
+        """
+        Completes authorization with the URL Spotify redirected the browser to (or just its code).
+        The redirect to 127.0.0.1 fails to load in the browser, but its URL still carries the code.
+        """
+        if not self.spotify:
+            raise RuntimeError("Spotify is not set up. Check the client ID and secret.")
+        auth_manager = self.spotify.auth_manager
+        code = auth_manager.parse_response_code(response.strip())
+        auth_manager.get_access_token(code, as_dict=False, check_cache=False)
+        logger.info("Spotify authentication successful 🎉")
+
     def get_current_playback(self) -> Optional[PlaybackInfo]:
         """
         Polls the Spotify API for the current playback state.
         Returns a PlaybackInfo object if music is playing on a whitelisted device, otherwise None.
         Handles rate limits and token refreshes automatically.
         """
-        if not self.spotify or time.time() < self.rate_limit_until:
+        if not self.is_authorized or time.time() < self.rate_limit_until:
             return None
 
         try:
@@ -141,8 +165,7 @@ class SpotifyModule:
         artist_text = ", ".join(a['name'] for a in artists if 'name' in a) if artists else None
         artist_text = clean_text(artist_text)
             
-        images = item['album']['images']
-        art_url = images[0]['url'] if images else None
+        art_url = self._pick_art_url(item['album']['images'])
         
         track_id = item['id']
         if track_id != self.last_track_id:
@@ -166,6 +189,14 @@ class SpotifyModule:
 
 
 
+    def _pick_art_url(self, images):
+        """Picks the smallest artwork that still covers the 64x64 matrix, falling back to the largest."""
+        if not images: return None
+        covering = [img for img in images if (img.get('width') or 0) >= 64 and (img.get('height') or 0) >= 64]
+        if covering:
+            return min(covering, key=lambda img: img['width'])['url']
+        return images[0]['url']
+
     def _parse_whitelist(self, config):
         wl_str = config.get('Spotify', 'device_whitelist', fallback='')
         if not wl_str: return []
@@ -177,14 +208,16 @@ class SpotifyModule:
             self.rate_limit_until = time.time() + retry
             logger.warning(f"Rate limited. Pausing for {retry}s")
 
-    def start_polling(self, callback, fetch_interval: float):
+    def start_polling(self, callback, fetch_interval: float, idle_fetch_interval: float):
         """
-        Starts a background daemon thread that continually fetches the current 
+        Starts a background daemon thread that continually fetches the current
         playback state and passes the result to the provided callback function.
+        Polls every idle_fetch_interval instead while nothing is playing.
         """
         def _fetch_loop():
             while True:
                 start_time = time.time()
+                info = None
                 try:
                     info = self.get_current_playback()
                     if info is not None:
@@ -192,7 +225,8 @@ class SpotifyModule:
                 except Exception as e:
                     logger.error(f"Error fetching Spotify data: {e}")
                 finally:
+                    interval = fetch_interval if info is not None and info.is_playing else idle_fetch_interval
                     elapsed = time.time() - start_time
-                    time.sleep(max(0.0, fetch_interval - elapsed))
+                    time.sleep(max(0.0, interval - elapsed))
         
         threading.Thread(target=_fetch_loop, daemon=True).start()

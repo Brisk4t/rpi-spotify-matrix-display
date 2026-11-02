@@ -11,17 +11,23 @@ license = "GPL-3.0-or-later"
 authors = [
     { name = "Kyle Johnson", email = "kyjohnson09@gmail.com" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = [
     "Pillow",
-    "numpy",
+    "paho-mqtt>=2.0",
     "requests",
     "spotipy",
-    "RGBMatrixEmulator",
-    "pygame",
+]
+
+[project.optional-dependencies]
+# Only for lyrics_provider = librelyrics; the built-in lyrics client needs nothing extra
+librelyrics = [
     "librelyrics",
     "librelyrics-spotify",
-    "rgbmatrix @ git+https://github.com/hzeller/rpi-rgb-led-matrix.git ; sys_platform == 'linux' and platform_machine != 'x86_64'",
+]
+emulator = [
+    "RGBMatrixEmulator",
+    "pygame",
 ]
 
 [project.urls]

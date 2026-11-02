@@ -46,9 +46,9 @@ class ArtCache:
                     l, t = (width - sz) // 2, (height - sz) // 2
                     img = img.crop((l, t, l + sz, t + sz))
                 
-                # Pre-scale to max matrix size in the background thread!
-                # This prevents the main thread from doing a heavy 640x640 resize.
-                img.thumbnail((64, 64), getattr(Image, 'Resampling', Image).LANCZOS)
+                # Spotify usually provides a 64x64 cover, so only downsample when it didn't
+                if img.size != (64, 64):
+                    img.thumbnail((64, 64), getattr(Image, 'Resampling', Image).LANCZOS)
                 
                 # Pre-generate the 48x48 size used by the standard view so the main thread does ZERO resizing!
                 img_48 = img.resize((48, 48), getattr(Image, 'Resampling', Image).LANCZOS)
