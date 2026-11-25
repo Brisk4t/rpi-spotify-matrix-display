@@ -91,6 +91,12 @@ def setup_matrix(config: configparser.ConfigParser, is_emulated: bool):
     options.cols = 64
     options.brightness = 100 if is_emulated else config.getint('Matrix', 'brightness', fallback=100)
     options.gpio_slowdown = config.getint('Matrix', 'gpio_slowdown', fallback=1)
+    # Refresh-rate tuning. The fallbacks are rgbmatrix's own defaults, so leaving them out changes nothing.
+    options.pwm_bits = min(11, max(1, config.getint('Matrix', 'pwm_bits', fallback=11)))
+    options.pwm_dither_bits = config.getint('Matrix', 'pwm_dither_bits', fallback=0)
+    options.pwm_lsb_nanoseconds = config.getint('Matrix', 'pwm_lsb_nanoseconds', fallback=130)
+    options.limit_refresh_rate_hz = config.getint('Matrix', 'limit_refresh_rate_hz', fallback=0)
+    options.show_refresh_rate = config.getboolean('Matrix', 'show_refresh_rate', fallback=False)
     options.drop_privileges = False
     
     matrix = RGBMatrix(options=options)

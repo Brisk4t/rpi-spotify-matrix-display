@@ -86,7 +86,12 @@ These are starting values. Changes made from Home Assistant or the settings page
 
 - `target_fps = 30` halves the drawing work compared to the default of 60
 - `idle_fetch_interval = 5` under `[Spotify]` polls Spotify every 5 seconds while nothing is playing (by default it uses `fetch_interval`)
-- `gpio_slowdown = 0` or `1` usually works, since the Pi Zero is slower than other Pis. Raise it if the display flickers
+- `gpio_slowdown = 0` or `1` usually works, since the Pi Zero is slower than other Pis. Raise it if the image shows glitches
+- If the display flickers, especially out of the corner of your eye, raise the refresh rate under `[Matrix]`:
+  - `pwm_bits = 8` (or 7) refreshes much faster than the default of 11, with slightly coarser gradients
+  - `pwm_dither_bits = 1` gains a bit more speed with little visible change
+  - `pwm_lsb_nanoseconds` below the default of 130 is faster too, but may cause ghosting on some panels
+  - `show_refresh_rate = true` prints the refresh rate while running with `make run`. Aim for 200 Hz or more
 
 ## 🏠 Home Assistant
 

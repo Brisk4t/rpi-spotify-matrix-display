@@ -6,6 +6,13 @@ saturation = 100
 ; Neutral, Warm, Cool or Night
 color_profile = Neutral
 gpio_slowdown = 2
+; Refresh-rate tuning for flicker. Fewer pwm_bits (1-11) refresh faster with slightly less color depth
+; pwm_bits = 11
+; pwm_dither_bits = 0
+; pwm_lsb_nanoseconds = 130
+; limit_refresh_rate_hz = 0
+; Prints the refresh rate to the console. Use with make run, not the service, since it prints constantly
+; show_refresh_rate = false
 
 [Player]
 target_fps = 60
